@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JavaScript Engine & Threads Demo</title>
+    <style>
+        body { 
+            font-family: sans-serif; 
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .left-panel {
+            flex: 1;
+            min-width: 300px;
+        }
+        .right-panel {
+            flex: 1;
+            min-width: 300px;
+        }
+        .control-panel {
+            background-color: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .slider-container {
+            margin: 15px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input[type="range"] {
+            width: 100%;
+            margin: 10px 0;
+        }
+        .value-display {
+            font-size: 14px;
+            color: #666;
+        }
+        button { 
+            padding: 10px 20px; 
+            font-size: 16px; 
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #output { 
+            border: 1px solid #ccc; 
+            padding: 10px; 
+            min-height: 200px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            overflow-y: auto;
+            max-height: 500px;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .status.running {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            display: block;
+        }
+        .status.completed {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+        h1 {
+            margin-bottom: 20px;
+        }
+        .description {
+            margin-bottom: 20px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>JavaScriptエンジンとスレッドのデモ</h1>
+    <p class="description">「Performance」タブで、このボタンをクリックした後のメインスレッドの動きを見てみましょう。</p>
+    
+    <div class="container">
+        <div class="left-panel">
+            <div class="control-panel">
+                <div class="slider-container">
+                    <label for="loopCount">ループ回数（千万回）:</label>
+                    <input type="range" id="loopCount" min="1" max="1000" value="500" step="1">
+                    <div class="value-display">現在の値: <span id="loopCountValue">500</span>千万回</div>
+                </div>
+                <div class="slider-container">
+                    <label for="timeoutDelay">タイムアウト遅延（ミリ秒）:</label>
+                    <input type="range" id="timeoutDelay" min="0" max="2000" value="0" step="100">
+                    <div class="value-display">現在の値: <span id="timeoutDelayValue">0</span>ミリ秒</div>
+                </div>
+                <button id="startButton">デモ開始</button>
+            </div>
+            <div id="status" class="status"></div>
+        </div>
+        <div class="right-panel">
+            <div id="output"></div>
+        </div>
+    </div>
+
+    <script>
+        const startButton = document.getElementById('startButton');
+        const outputDiv = document.getElementById('output');
+        const statusDiv = document.getElementById('status');
+        const loopCountSlider = document.getElementById('loopCount');
+        const loopCountValue = document.getElementById('loopCountValue');
+        const timeoutDelaySlider = document.getElementById('timeoutDelay');
+        const timeoutDelayValue = document.getElementById('timeoutDelayValue');
+
+        // スライダーの値の更新
+        loopCountSlider.addEventListener('input', () => {
+            loopCountValue.textContent = loopCountSlider.value;
+        });
+
+        timeoutDelaySlider.addEventListener('input', () => {
+            timeoutDelayValue.textContent = timeoutDelaySlider.value;
+        });
+
+        function logOutput(message) {
+            const p = document.createElement('p');
+            p.textContent = message;
+            outputDiv.appendChild(p);
+            console.log(message);
+        }
+
+        function updateStatus(message, type) {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        startButton.addEventListener('click', () => {
+            // 出力をクリア
+            outputDiv.innerHTML = '';
+            statusDiv.innerHTML = '';
+            statusDiv.className = 'status';
+            
+            updateStatus('デモ実行中...', 'running');
+            startButton.disabled = true;
+            startButton.textContent = 'デモ実行中...';
+
+            // ここで一度イベントループに制御を返す
+            setTimeout(() => {
+                const loopCount = parseInt(loopCountSlider.value) * 10000000; // 千万回に変換
+                const timeoutDelay = parseInt(timeoutDelaySlider.value);
+
+                logOutput("--- デモ開始 ---");
+                logOutput(`1. ループ回数: ${loopCount.toLocaleString()}回`);
+                logOutput(`2. タイムアウト遅延: ${timeoutDelay}ミリ秒`);
+
+                const startTime = performance.now();
+
+                performance.mark('startEventLoop');
+
+                // 同期的なループ
+                let i = 0;
+                while (i < loopCount) {
+                    i++;
+                }
+
+                performance.mark('endEventLoop');
+                performance.measure('Sync Loop Execution', 'startEventLoop', 'endEventLoop');
+
+                const syncEndTime = performance.now();
+                logOutput(`3. 同期的な処理の実行時間: ${(syncEndTime - startTime).toFixed(2)}ミリ秒`);
+
+                logOutput("4. setTimeout(() => { ... }, 0); がWeb APIに渡される直前");
+
+                setTimeout(() => {
+                    performance.mark('startTimeoutCallback');
+                    const asyncStartTime = performance.now();
+                    logOutput("5. Timeout Callback 実行！");
+
+                    const asyncEndTime = performance.now();
+                    logOutput(`6. 非同期処理の実行時間: ${(asyncEndTime - asyncStartTime).toFixed(2)}ミリ秒`);
+                    logOutput("7. Timeout Callback 終了");
+                    
+                    updateStatus('デモ完了！', 'completed');
+                    startButton.disabled = false;
+                    startButton.textContent = 'デモ開始';
+                    performance.mark('endTimeoutCallback');
+                    performance.measure('Async Timeout Execution', 'startTimeoutCallback', 'endTimeoutCallback');
+                }, timeoutDelay);
+
+                logOutput("8. console.log('End');");
+                logOutput("--- デモ終了 ---");
+                logOutput("--- コールスタックが空になり、イベントループがタスクキューを監視 ---");
+            }, 0);
+        });
+    </script>
+</body>
+</html>
